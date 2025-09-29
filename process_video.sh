@@ -8,7 +8,7 @@ OUTPUT_FILE="$4"
 
 if [ -z "$INPUT_FILE" ] || [ -z "$OUTPUT_FILE" ]; then
   echo "❌ Usage: $0 input.mp4 [intro.mp4] flip output.mp4"
-  echo "   flip = 0 (bình thường), 2 (lật ngang)"
+  echo "   flip = 0 (bình thường), 1 (lật ngang)"
   exit 1
 fi
 
@@ -18,7 +18,7 @@ fi
 VF_FILTERS="scale=1080:1920:force_original_aspect_ratio=decrease,"
 VF_FILTERS+="pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1:1,fps=30"
 
-if [ "$FLIP" -eq 2 ]; then
+if [ "$FLIP" -eq 1 ]; then
   VF_FILTERS="$VF_FILTERS,hflip"
 fi
 
