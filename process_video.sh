@@ -51,17 +51,17 @@ EOF
 
   # Encode lại lần cuối để tránh lỗi metadata
   ffmpeg -y -i merged_temp.mp4 \
-    -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -profile:v high \
+    -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high \
     -c:a aac -b:a 192k -ar 44100 \
-    -movflags +faststart -fflags +genpts \
+    -movflags +faststart -fflags +genpts -video_track_timescale 30 \
     "$OUTPUT_FILE"
 
 else
   echo "👉 Không có intro, chỉ dùng INPUT."
   ffmpeg -y -i input_encoded.mp4 \
-    -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -profile:v high \
+    -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high \
     -c:a aac -b:a 192k -ar 44100 \
-    -movflags +faststart -fflags +genpts \
+    -movflags +faststart -fflags +genpts -video_track_timescale 30 \
     "$OUTPUT_FILE"
 fi
 
