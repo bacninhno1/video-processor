@@ -47,13 +47,22 @@ file 'intro_encoded.mp4'
 EOF
 
   echo "🔗 Ghép INPUT + INTRO..."
-  ffmpeg -y -f concat -safe 0 -i list.txt \
-    -c copy \
+  ffmpeg -y -f concat -safe 0 -i list.txt -c copy merged_temp.mp4
+
+  # Encode lại lần cuối để tránh lỗi metadata
+  ffmpeg -y -i merged_temp.mp4 \
+    -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -profile:v high \
+    -c:a aac -b:a 192k -ar 44100 \
+    -movflags +faststart -fflags +genpts \
     "$OUTPUT_FILE"
 
 else
   echo "👉 Không có intro, chỉ dùng INPUT."
-  mv input_encoded.mp4 "$OUTPUT_FILE"
+  ffmpeg -y -i input_encoded.mp4 \
+    -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -profile:v high \
+    -c:a aac -b:a 192k -ar 44100 \
+    -movflags +faststart -fflags +genpts \
+    "$OUTPUT_FILE"
 fi
 
 echo "✅ Done! Output: $OUTPUT_FILE"
