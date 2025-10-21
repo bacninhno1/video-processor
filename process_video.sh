@@ -13,27 +13,38 @@ if [ -z "$INPUT_FILE" ] || [ -z "$OUTPUT_FILE" ]; then
 fi
 
 # -----------------------------
-# Bộ lọc cho video dọc
+# Bộ lọc cơ bản cho video dọc
 # -----------------------------
-VF_FILTERS="scale=1080:1920:force_original_aspect_ratio=decrease,"
-VF_FILTERS+="pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1:1,fps=30"
+BASE_FILTER="scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1:1,fps=30"
 
+# Chỉ lật INPUT nếu FLIP=1
 if [ "$FLIP" -eq 1 ]; then
-  VF_FILTERS="$VF_FILTERS,hflip"
+  VF_FILTERS_INPUT="$BASE_FILTER,hflip"
+else
+  VF_FILTERS_INPUT="$BASE_FILTER"
 fi
 
+# Intro luôn không lật
+VF_FILTERS_INTRO="$BASE_FILTER"
+
+# -----------------------------
+# Encode INPUT
+# -----------------------------
 echo "🎬 Encode INPUT..."
 ffmpeg -y -i "$INPUT_FILE" \
-  -vf "$VF_FILTERS" \
+  -vf "$VF_FILTERS_INPUT" \
   -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high \
   -c:a aac -b:a 192k -ar 44100 \
   -movflags +faststart -fflags +genpts \
   input_encoded.mp4
 
+# -----------------------------
+# Nếu có intro, encode và nối
+# -----------------------------
 if [ -n "$INTRO_FILE" ] && [ -f "$INTRO_FILE" ]; then
   echo "🎬 Encode INTRO..."
   ffmpeg -y -i "$INTRO_FILE" \
-    -vf "$VF_FILTERS" \
+    -vf "$VF_FILTERS_INTRO" \
     -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high \
     -c:a aac -b:a 192k -ar 44100 \
     -movflags +faststart -fflags +genpts \
@@ -41,13 +52,14 @@ if [ -n "$INTRO_FILE" ] && [ -f "$INTRO_FILE" ]; then
 
   echo "📝 Concat list..."
   cat > list.txt <<EOF
-file 'input_encoded.mp4'
 file 'intro_encoded.mp4'
+file 'input_encoded.mp4'
 EOF
 
   echo "🔗 Merge intro + main..."
   ffmpeg -y -f concat -safe 0 -i list.txt -c copy merged_temp.mp4
 
+  echo "🎞 Final encode..."
   ffmpeg -y -i merged_temp.mp4 \
     -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high \
     -c:a aac -b:a 192k -ar 44100 \
