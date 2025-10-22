@@ -52,8 +52,8 @@ if [ -n "$INTRO_FILE" ] && [ -f "$INTRO_FILE" ]; then
 
   echo "📝 Concat list..."
   cat > list.txt <<EOF
-file 'intro_encoded.mp4'
 file 'input_encoded.mp4'
+file 'intro_encoded.mp4'
 EOF
 
   echo "🔗 Merge intro + main..."
