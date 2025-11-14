@@ -1,15 +1,39 @@
-- name: Delete old workflow runs
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    DAYS=7
-    CUTOFF_DATE=$(date -d "$DAYS days ago" --iso-8601=seconds)
-    echo "Deleting workflow runs older than $DAYS days (before $CUTOFF_DATE)"
+name: Cleanup old workflow runs
 
-    RUN_IDS=$(gh run list --limit 1000 --json databaseId,createdAt -q \
-    '.[] | select(.createdAt < "'"$CUTOFF_DATE"'") | .databaseId')
+# Cho phép chạy thủ công
+on:
+  workflow_dispatch:
 
-    for id in $RUN_IDS; do
-      echo "Deleting workflow run ID: $id"
-      gh run delete $id --repo $GITHUB_REPOSITORY --yes
-    done
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install -y gh
+
+      - name: Delete old workflow runs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Xóa các workflow run/artifact cũ hơn N ngày
+          DAYS=50
+          CUTOFF_DATE=$(date -d "$DAYS days ago" --iso-8601=seconds)
+          echo "Deleting workflow runs older than $DAYS days (before $CUTOFF_DATE)"
+
+          # Lấy danh sách workflow run cũ
+          RUN_IDS=$(gh run list --limit 1000 --json databaseId,createdAt -q \
+          '.[] | select(.createdAt < "'"$CUTOFF_DATE"'") | .databaseId')
+
+          # Xóa từng run
+          for id in $RUN_IDS; do
+            echo "Deleting workflow run ID: $id"
+            gh run delete $id --repo $GITHUB_REPOSITORY --yes
+          done
+
+          echo "Cleanup complete!"
