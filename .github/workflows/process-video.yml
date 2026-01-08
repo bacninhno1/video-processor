@@ -46,30 +46,31 @@ jobs:
       - name: Upload Processed Video & Callback
         run: |
           echo "Uploading final video..."
-          response=$(curl -s -w "%{http_code}" -o upload_response.json \
-                     -F "file=@output_final.mp4" \
-                     "${{ secrets.UPLOAD_URL }}")
-          status_code=$(printf "%s" "$response" | tail -c 3)
-          body=$(cat upload_response.json)
+          # Ghi phản hồi vào file
+          curl -s -F "file=@output_final.mp4" "${{ secrets.UPLOAD_URL }}" -o raw_response.json
+          
+          # TRÍCH XUẤT JSON SẠCH: Loại bỏ mọi cảnh báo PHP dính kèm
+          cat raw_response.json | grep -o '{.*}' > clean_response.json || true
+          
+          # Đọc nội dung đã làm sạch
+          body=$(cat clean_response.json)
+          echo "Debug response: $body"
 
-          if [ "$status_code" != "200" ]; then
-            echo "❌ Upload failed! HTTP $status_code"
-            cat upload_response.json
-            exit 1
-          fi
-
-          output_url=$(echo "$body" | jq -r '.output_url')
-          echo "::add-mask::$output_url"
-
+          # Sử dụng jq trên file đã làm sạch
+          output_url=$(jq -r '.output_url' clean_response.json 2>/dev/null || echo "null")
+          
           if [ "$output_url" = "null" ] || [ -z "$output_url" ]; then
-            echo "❌ Upload failed! No output_url returned."
+            echo "❌ Upload failed! Rác hoặc lỗi hệ thống chặn mất JSON."
+            echo "Nội dung gốc từ Server trả về:"
+            cat raw_response.json
             exit 1
           fi
 
-          echo "✅ Upload thành công, link đã được mask."
+          echo "::add-mask::$output_url"
+          echo "✅ Upload thành công: $output_url"
 
           echo "Sending callback..."
           curl -s -X POST -H "Content-Type: application/json" \
-               -d '{"job_id": "'"${{ github.event.client_payload.job_id }}"'", "output_url": "'"$output_url"'"}' \
+               -d "{\"job_id\": \"${{ github.event.client_payload.job_id }}\", \"output_url\": \"$output_url\"}" \
                "${{ secrets.CALLBACK_URL }}"
           echo "✅ Callback sent."
