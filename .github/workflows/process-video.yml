@@ -9,35 +9,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------------
-      # Checkout
-      # -----------------------------
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # -----------------------------
-      # Install tools (ổn định)
-      # -----------------------------
-      - name: Install tools
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq curl
+      # Đã bỏ bước Install tools vì Runner có sẵn hết rồi
 
-      # -----------------------------
-      # Check FFmpeg (có sẵn trên runner)
-      # -----------------------------
-      - name: FFmpeg version
-        run: ffmpeg -version
-
-      # -----------------------------
-      # Download input files
-      # -----------------------------
       - name: Download input files
         run: |
           set -e
-
           echo "⬇ Download main video..."
-          curl -L --fail -o input.mp4 "${{ secrets.MY_DOWNLOAD_URL }}?id=${{ github.event.client_payload.video_url }}&raw=1"
+          # Thêm --retry 3 để chống lag mạng
+          curl -L --fail --retry 3 -o input.mp4 "${{ secrets.MY_DOWNLOAD_URL }}?id=${{ github.event.client_payload.video_url }}&raw=1"
 
           if [ ! -s input.mp4 ]; then
             echo "❌ input.mp4 lỗi hoặc rỗng"
@@ -47,36 +29,20 @@ jobs:
           INTRO_URL="${{ github.event.client_payload.intro_url }}"
           if [ ! -z "$INTRO_URL" ] && [ "$INTRO_URL" != "0" ]; then
             echo "⬇ Download intro..."
-            curl -L --fail -o intro.mp4 "${{ secrets.MY_INTRO_URL }}?id=$INTRO_URL"
-
-            if [ ! -s intro.mp4 ]; then
-              echo "⚠ intro lỗi → bỏ qua"
-              rm -f intro.mp4
-            fi
-          else
-            echo "No intro"
+            curl -L --fail --retry 3 -o intro.mp4 "${{ secrets.MY_INTRO_URL }}?id=$INTRO_URL"
+            [ ! -s intro.mp4 ] && rm -f intro.mp4 || echo "✅ Intro OK"
           fi
 
           AUDIO_URL="${{ github.event.client_payload.audio_url }}"
           if [ ! -z "$AUDIO_URL" ] && [ "$AUDIO_URL" != "0" ]; then
             echo "⬇ Download audio..."
-            curl -L --fail -o audio.mp3 "$AUDIO_URL"
-
-            if [ ! -s audio.mp3 ]; then
-              echo "⚠ audio lỗi → bỏ qua"
-              rm -f audio.mp3
-            fi
-          else
-            echo "No audio"
+            curl -L --fail --retry 3 -o audio.mp3 "$AUDIO_URL"
+            [ ! -s audio.mp3 ] && rm -f audio.mp3 || echo "✅ Audio OK"
           fi
 
-      # -----------------------------
-      # Process video
-      # -----------------------------
       - name: Process video
         run: |
           set -e
-
           chmod +x process_dynamic.sh
 
           INTRO_FILE=""
@@ -93,23 +59,20 @@ jobs:
             output_final.mp4
 
           if [ ! -s output_final.mp4 ]; then
-            echo "❌ FFmpeg không tạo file output"
+            echo "❌ FFmpeg không tạo được file output"
             exit 1
           fi
 
-      # -----------------------------
-      # Upload + callback
-      # -----------------------------
       - name: Upload & callback
         run: |
           set -e
-
           echo "⬆ Uploading..."
-          response=$(curl -s -w "%{http_code}" -o upload_response.json \
+          # -f để curl trả về lỗi nếu upload thất bại
+          response=$(curl -f -s -w "%{http_code}" -o upload_response.json \
             -F "file=@output_final.mp4" \
             "${{ secrets.UPLOAD_URL }}")
 
-          code=$(printf "%s" "$response" | tail -c 3)
+          code=$(echo "$response" | tail -c 3)
 
           if [ "$code" != "200" ]; then
             echo "❌ Upload failed ($code)"
@@ -117,10 +80,10 @@ jobs:
             exit 1
           fi
 
-          output_url=$(jq -r '.output_url' upload_response.json)
+          output_url=$(jq -r '.output_url // empty' upload_response.json)
 
           if [ -z "$output_url" ] || [ "$output_url" = "null" ]; then
-            echo "❌ Không có output_url"
+            echo "❌ Không lấy được output_url từ response"
             exit 1
           fi
 
@@ -128,7 +91,13 @@ jobs:
           echo "✅ Upload OK: $output_url"
 
           echo "📡 Callback..."
+          # Tạo JSON an toàn bằng jq
+          CALLBACK_DATA=$(jq -n \
+            --arg id "${{ github.event.client_payload.job_id }}" \
+            --arg url "$output_url" \
+            '{job_id: $id, output_url: $url}')
+
           curl -s -X POST \
             -H "Content-Type: application/json" \
-            -d "{\"job_id\":\"${{ github.event.client_payload.job_id }}\",\"output_url\":\"$output_url\"}" \
+            -d "$CALLBACK_DATA" \
             "${{ secrets.CALLBACK_URL }}"
